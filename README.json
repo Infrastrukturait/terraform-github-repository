@@ -1,15 +1,20 @@
 {
-  "authors": [],
-  "badges": [],
+  "authors": [
+    {
+      "email": "rafal@masiarek.pl",
+      "github": "rafalmasiarek",
+      "name": "Rafa\u0142 Masiarek",
+      "website": "https://masiarek.pl"
+    }
+  ],
   "context": [
     "## About",
-    "A [1][Terraform] module for creating a public or private repository on [2][Github]."
+    "A [1](Terraform) module for creating a public or private repository on [2](Github)."
   ],
   "includes": [
     "docs/terraform.md"
   ],
   "license": "GPLv3",
-  "logo": "",
   "name": "terraform-github-repository",
   "references": [
     "https://www.terraform.io/",

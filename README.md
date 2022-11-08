@@ -2,9 +2,8 @@
 # terraform-github-repository
 
 [![WeSupportUkraine](https://raw.githubusercontent.com/Infrastrukturait/WeSupportUkraine/main/banner.svg)](https://github.com/Infrastrukturait/WeSupportUkraine)
-![terraform-github-repository]()
 ## About
-A [1][Terraform] module for creating a public or private repository on [2][Github].
+A [1](Terraform) module for creating a public or private repository on [2](Github).
 ## License
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
@@ -27,6 +26,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ```
 ## Authors
+- Rafał Masiarek | [website](https://masiarek.pl) | [email](mailto:rafal@masiarek.pl) | [github](https://github.com/rafalmasiarek)
 <!-- BEGIN_TF_DOCS -->
 ## Documentation
 

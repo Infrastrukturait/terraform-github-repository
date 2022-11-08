@@ -1,35 +1,3 @@
-
-# terraform-github-repository
-
-[![WeSupportUkraine](https://raw.githubusercontent.com/Infrastrukturait/WeSupportUkraine/main/banner.svg)](https://github.com/Infrastrukturait/WeSupportUkraine)
-![terraform-github-repository]()
-## About
-A [1](Terraform) module for creating a public or private repository on [2](Github).
-**_This module supports Terraform v1.x and is compatible with the Official Terraform GitHub Provider v4.20 and above from `integrations/github`._**
-**Attention: This module is incompatible with the Hashicorp GitHub Provider! The latest version of this module supporting `hashicorp/github` provider is `~> 0.10.0`**
-** Note: Versions 5.3.0, 5.4.0, and 5.5.0 of the Terraform Github Provider have broken branch protections support and should not be used.**
-## License
-
-[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-
-```text
-GNU GENERAL PUBLIC LICENSE
-Version 3, 29 June 2007
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
-```
-## Authors
 <!-- BEGIN_TF_DOCS -->
 ## Documentation
 
@@ -154,17 +122,3 @@ No modules.
 ```
 
 <!-- END_TF_DOCS -->
-
-
-<!-- references -->
-
-[repo_link]: https://github.com/Infrastrukturait/terraform-github-repository
-[1]: https://www.terraform.io/
-[2]: https://github.com/
-[3]: https://github.com/github/gitignore
-[4]: https://github.com/github/choosealicense.com/tree/gh-pages/_licenses
-[5]: https://www.terraform.io/docs/providers/github/r/repository_webhook.html
-[6]: https://www.terraform.io/docs/providers/github/r/actions_secret
-[7]: https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_autolink_reference
-[8]: https://github.com/hashicorp/terraform/issues/19898
-[9]: https://github.com/hashicorp/terraform/issues/22449

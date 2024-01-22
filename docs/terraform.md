@@ -9,12 +9,6 @@
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14 |
 | <a name="requirement_github"></a> [github](#requirement\_github) | >= 4.20, < 6.0 |
 
-### Providers
-
-| Name | Version |
-|------|---------|
-| <a name="provider_github"></a> [github](#provider\_github) | 5.7.0 |
-
 ### Modules
 
 No modules.

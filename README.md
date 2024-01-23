@@ -153,7 +153,6 @@ No modules.
 
 <!-- END_TF_DOCS -->
 
-
 <!-- references -->
 
 [repo_link]: https://github.com/Infrastrukturait/terraform-github-repository

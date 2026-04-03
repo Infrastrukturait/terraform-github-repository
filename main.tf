@@ -1,34 +1,36 @@
-# ---------------------------------------------------------------------------------------------------------------------
-# Create the repository
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository
-# ---------------------------------------------------------------------------------------------------------------------
-
 resource "github_repository" "repository" {
-  name                   = var.name
-  description            = var.description
-  homepage_url           = var.homepage_url
-  visibility             = var.visibility
-  has_issues             = var.has_issues
-  has_projects           = var.has_projects
-  has_wiki               = var.has_wiki
-  allow_merge_commit     = var.allow_merge_commit
-  allow_rebase_merge     = var.allow_rebase_merge
-  allow_squash_merge     = var.allow_squash_merge
-  allow_auto_merge       = var.allow_auto_merge
-  delete_branch_on_merge = var.delete_branch_on_merge
-  is_template            = var.is_template
-  has_downloads          = var.has_downloads
-  auto_init              = var.auto_init
-  gitignore_template     = var.gitignore_template
-  license_template       = var.license_template
-  archived               = var.archived
-  topics                 = var.topics
+  name                        = var.name
+  description                 = var.description
+  homepage_url                = local.homepage_url
+  visibility                  = local.visibility
+  has_issues                  = local.has_issues
+  has_projects                = local.has_projects
+  has_wiki                    = local.has_wiki
+  has_discussions             = local.has_discussions
+  allow_merge_commit          = local.allow_merge_commit
+  allow_rebase_merge          = local.allow_rebase_merge
+  allow_squash_merge          = local.allow_squash_merge
+  allow_auto_merge            = local.allow_auto_merge
+  allow_update_branch         = local.allow_update_branch
+  allow_forking               = local.allow_forking
+  delete_branch_on_merge      = local.delete_branch_on_merge
+  is_template                 = local.is_template
+  auto_init                   = local.auto_init
+  gitignore_template          = local.gitignore_template
+  license_template            = local.license_template
+  merge_commit_title          = local.merge_commit_title
+  merge_commit_message        = local.merge_commit_message
+  squash_merge_commit_title   = local.squash_merge_commit_title
+  squash_merge_commit_message = local.squash_merge_commit_message
+  web_commit_signoff_required = local.web_commit_signoff_required
+  archived                    = var.archived
+  topics                      = local.topics
 
   archive_on_destroy   = var.archive_on_destroy
-  vulnerability_alerts = var.vulnerability_alerts
+  vulnerability_alerts = local.vulnerability_alerts
 
   dynamic "template" {
-    for_each = var.template
+    for_each = local.template
 
     content {
       owner      = template.value.owner
@@ -37,14 +39,20 @@ resource "github_repository" "repository" {
   }
 
   dynamic "pages" {
-    for_each = var.pages != null ? [true] : []
+    for_each = local.pages != null ? [local.pages] : []
 
     content {
-      source {
-        branch = var.pages.branch
-        path   = try(var.pages.path, "/")
+      build_type = try(pages.value.build_type, "legacy")
+      cname      = try(pages.value.cname, null)
+
+      dynamic "source" {
+        for_each = try(pages.value.build_type, "legacy") == "legacy" ? [true] : []
+
+        content {
+          branch = pages.value.branch
+          path   = try(pages.value.path, "/")
+        }
       }
-      cname = try(var.pages.cname, null)
     }
   }
 
@@ -58,15 +66,6 @@ resource "github_repository" "repository" {
   }
 }
 
-# ---------------------------------------------------------------------------------------------------------------------
-# Manage branches
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/branch
-# ---------------------------------------------------------------------------------------------------------------------
-
-locals {
-  branches_map = { for b in var.branches : b.name => b }
-}
-
 resource "github_branch" "branch" {
   for_each = local.branches_map
 
@@ -76,30 +75,72 @@ resource "github_branch" "branch" {
   source_sha    = try(each.value.source_sha, null)
 }
 
-# ---------------------------------------------------------------------------------------------------------------------
-# Set default branch
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/branch_default
-# ---------------------------------------------------------------------------------------------------------------------
-
 resource "github_branch_default" "default" {
-  count = var.default_branch != null ? 1 : 0
+  count = local.default_branch != null ? 1 : 0
 
   repository = github_repository.repository.name
-  branch     = var.default_branch
+  branch     = local.default_branch
 
   depends_on = [github_branch.branch]
 }
 
-# ---------------------------------------------------------------------------------------------------------------------
-# Branch Protection
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/branch_protection_v3
-# ---------------------------------------------------------------------------------------------------------------------
+resource "github_branch_protection" "branch_protection" {
+  for_each = local.branch_protections_v4_map
+
+  depends_on = [
+    github_repository_collaborator.collaborator,
+    github_team_repository.team_repository,
+    github_team_repository.team_repository_by_slug,
+    github_branch.branch,
+  ]
+
+  repository_id = github_repository.repository.node_id
+  pattern       = var.branch_protections_v4[each.value].pattern
+
+  allows_deletions                = try(var.branch_protections_v4[each.value].allows_deletions, false)
+  allows_force_pushes             = try(var.branch_protections_v4[each.value].allows_force_pushes, false)
+  enforce_admins                  = try(var.branch_protections_v4[each.value].enforce_admins, true)
+  require_conversation_resolution = try(var.branch_protections_v4[each.value].require_conversation_resolution, false)
+  require_signed_commits          = try(var.branch_protections_v4[each.value].require_signed_commits, false)
+  required_linear_history         = try(var.branch_protections_v4[each.value].required_linear_history, false)
+  force_push_bypassers            = try(var.branch_protections_v4[each.value].force_push_bypassers, [])
+  lock_branch                     = try(var.branch_protections_v4[each.value].lock_branch, false)
+
+  dynamic "restrict_pushes" {
+    for_each = try([var.branch_protections_v4[each.value].restrict_pushes], [])
+
+    content {
+      blocks_creations = try(restrict_pushes.value.blocks_creations, true)
+      push_allowances  = try(restrict_pushes.value.push_allowances, [])
+    }
+  }
+
+  dynamic "required_pull_request_reviews" {
+    for_each = try([var.branch_protections_v4[each.value].required_pull_request_reviews], [])
+
+    content {
+      dismiss_stale_reviews           = try(required_pull_request_reviews.value.dismiss_stale_reviews, true)
+      restrict_dismissals             = try(required_pull_request_reviews.value.restrict_dismissals, null)
+      dismissal_restrictions          = try(required_pull_request_reviews.value.dismissal_restrictions, [])
+      pull_request_bypassers          = try(required_pull_request_reviews.value.pull_request_bypassers, [])
+      require_code_owner_reviews      = try(required_pull_request_reviews.value.require_code_owner_reviews, true)
+      required_approving_review_count = try(required_pull_request_reviews.value.required_approving_review_count, 0)
+    }
+  }
+
+  dynamic "required_status_checks" {
+    for_each = try([var.branch_protections_v4[each.value].required_status_checks], [])
+
+    content {
+      strict   = try(required_status_checks.value.strict, false)
+      contexts = try(required_status_checks.value.contexts, [])
+    }
+  }
+}
 
 resource "github_branch_protection_v3" "branch_protection" {
-  count = length(local.branch_protections)
+  count = length(local.branch_protections_v3)
 
-  # ensure we have all members and collaborators added before applying
-  # any configuration for them
   depends_on = [
     github_repository_collaborator.collaborator,
     github_team_repository.team_repository,
@@ -108,13 +149,13 @@ resource "github_branch_protection_v3" "branch_protection" {
   ]
 
   repository                      = github_repository.repository.name
-  branch                          = local.branch_protections[count.index].branch
-  enforce_admins                  = local.branch_protections[count.index].enforce_admins
-  require_conversation_resolution = local.branch_protections[count.index].require_conversation_resolution
-  require_signed_commits          = local.branch_protections[count.index].require_signed_commits
+  branch                          = local.branch_protections_v3[count.index].branch
+  enforce_admins                  = local.branch_protections_v3[count.index].enforce_admins
+  require_conversation_resolution = local.branch_protections_v3[count.index].require_conversation_resolution
+  require_signed_commits          = local.branch_protections_v3[count.index].require_signed_commits
 
   dynamic "required_status_checks" {
-    for_each = local.required_status_checks[count.index]
+    for_each = local.required_status_checks_v3_normalized[count.index]
 
     content {
       strict   = required_status_checks.value.strict
@@ -129,8 +170,20 @@ resource "github_branch_protection_v3" "branch_protection" {
       dismiss_stale_reviews           = required_pull_request_reviews.value.dismiss_stale_reviews
       dismissal_users                 = required_pull_request_reviews.value.dismissal_users
       dismissal_teams                 = [for t in required_pull_request_reviews.value.dismissal_teams : replace(lower(t), "/[^a-z0-9_]/", "-")]
+      dismissal_apps                  = required_pull_request_reviews.value.dismissal_apps
       require_code_owner_reviews      = required_pull_request_reviews.value.require_code_owner_reviews
       required_approving_review_count = required_pull_request_reviews.value.required_approving_review_count
+      require_last_push_approval      = required_pull_request_reviews.value.require_last_push_approval
+
+      dynamic "bypass_pull_request_allowances" {
+        for_each = length(keys(required_pull_request_reviews.value.bypass_pull_request_allowances)) > 0 ? [required_pull_request_reviews.value.bypass_pull_request_allowances] : []
+
+        content {
+          users = try(bypass_pull_request_allowances.value.users, [])
+          teams = try(bypass_pull_request_allowances.value.teams, [])
+          apps  = try(bypass_pull_request_allowances.value.apps, [])
+        }
+      }
     }
   }
 
@@ -145,101 +198,239 @@ resource "github_branch_protection_v3" "branch_protection" {
   }
 }
 
-# ---------------------------------------------------------------------------------------------------------------------
-# Issue Labels
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/issue_label
-# ---------------------------------------------------------------------------------------------------------------------
+resource "github_repository_ruleset" "ruleset" {
+  for_each = local.rulesets_map
 
-locals {
-  # only add to the list of labels even if github removes labels as changing this will affect
-  # all deployed repositories.
-  # add labels if new labels in github are added by default.
-  # this is the set of labels and colors as of 2020-02-02
-  github_default_issue_labels = var.issue_labels_merge_with_github_labels ? [
-    {
-      name        = "bug"
-      description = "Something isn't working"
-      color       = "d73a4a"
-    },
-    {
-      name        = "documentation"
-      description = "Improvements or additions to documentation"
-      color       = "0075ca"
-    },
-    {
-      name        = "duplicate"
-      description = "This issue or pull request already exists"
-      color       = "cfd3d7"
-    },
-    {
-      name        = "enhancement"
-      description = "New feature or request"
-      color       = "a2eeef"
-    },
-    {
-      name        = "good first issue"
-      description = "Good for newcomers"
-      color       = "7057ff"
-    },
-    {
-      name        = "help wanted"
-      description = "Extra attention is needed"
-      color       = "008672"
-    },
-    {
-      name        = "invalid"
-      description = "This doesn't seem right"
-      color       = "e4e669"
-    },
-    {
-      name        = "question"
-      description = "Further information is requested"
-      color       = "d876e3"
-    },
-    {
-      name        = "wontfix"
-      description = "This will not be worked on"
-      color       = "ffffff"
+  name        = each.value.name
+  target      = each.value.target
+  enforcement = each.value.enforcement
+  repository  = github_repository.repository.name
+
+  dynamic "conditions" {
+    for_each = (
+      each.value.target != "push" ||
+      try(each.value.conditions.ref_name, null) != null
+    ) ? [true] : []
+
+    content {
+      ref_name {
+        include = try(each.value.conditions.ref_name.include, ["~DEFAULT_BRANCH"])
+        exclude = try(each.value.conditions.ref_name.exclude, [])
+      }
     }
-  ] : []
+  }
 
-  github_issue_labels = { for i in local.github_default_issue_labels : i.name => i }
+  dynamic "bypass_actors" {
+    for_each = try(each.value.bypass_actors, [])
 
-  module_issue_labels = { for i in var.issue_labels : lookup(i, "id", lower(i.name)) => merge({
-    description = null
-  }, i) }
+    content {
+      actor_id    = try(bypass_actors.value.actor_id, null)
+      actor_type  = bypass_actors.value.actor_type
+      bypass_mode = try(bypass_actors.value.bypass_mode, "always")
+    }
+  }
 
-  issue_labels = merge(local.github_issue_labels, local.module_issue_labels)
+  rules {
+    creation                      = try(each.value.rules.creation, false)
+    update                        = try(each.value.rules.update, false)
+    update_allows_fetch_and_merge = try(each.value.rules.update_allows_fetch_and_merge, null)
+    deletion                      = try(each.value.rules.deletion, false)
+    required_linear_history       = try(each.value.rules.required_linear_history, false)
+    required_signatures           = try(each.value.rules.required_signatures, false)
+    non_fast_forward              = try(each.value.rules.non_fast_forward, false)
+
+    dynamic "branch_name_pattern" {
+      for_each = try(each.value.rules.branch_name_pattern, null) != null ? [each.value.rules.branch_name_pattern] : []
+
+      content {
+        operator = branch_name_pattern.value.operator
+        pattern  = branch_name_pattern.value.pattern
+        name     = try(branch_name_pattern.value.name, null)
+        negate   = try(branch_name_pattern.value.negate, null)
+      }
+    }
+
+    dynamic "tag_name_pattern" {
+      for_each = try(each.value.rules.tag_name_pattern, null) != null ? [each.value.rules.tag_name_pattern] : []
+
+      content {
+        operator = tag_name_pattern.value.operator
+        pattern  = tag_name_pattern.value.pattern
+        name     = try(tag_name_pattern.value.name, null)
+        negate   = try(tag_name_pattern.value.negate, null)
+      }
+    }
+
+    dynamic "commit_author_email_pattern" {
+      for_each = try(each.value.rules.commit_author_email_pattern, null) != null ? [each.value.rules.commit_author_email_pattern] : []
+
+      content {
+        operator = commit_author_email_pattern.value.operator
+        pattern  = commit_author_email_pattern.value.pattern
+        name     = try(commit_author_email_pattern.value.name, null)
+        negate   = try(commit_author_email_pattern.value.negate, null)
+      }
+    }
+
+    dynamic "required_status_checks" {
+      for_each = try(each.value.rules.required_status_checks, null) != null ? [each.value.rules.required_status_checks] : []
+
+      content {
+        do_not_enforce_on_create             = try(required_status_checks.value.do_not_enforce_on_create, null)
+        strict_required_status_checks_policy = try(required_status_checks.value.strict_required_status_checks_policy, null)
+
+        dynamic "required_check" {
+          for_each = try(required_status_checks.value.required_check, [])
+
+          content {
+            context        = required_check.value.context
+            integration_id = try(required_check.value.integration_id, null)
+          }
+        }
+      }
+    }
+
+    dynamic "required_deployments" {
+      for_each = try(each.value.rules.required_deployments, null) != null ? [each.value.rules.required_deployments] : []
+
+      content {
+        required_deployment_environments = try(required_deployments.value.required_deployment_environments, [])
+      }
+    }
+
+    dynamic "pull_request" {
+      for_each = try(each.value.rules.pull_request, null) != null ? [each.value.rules.pull_request] : []
+
+      content {
+        dismiss_stale_reviews_on_push     = try(pull_request.value.dismiss_stale_reviews_on_push, null)
+        require_code_owner_review         = try(pull_request.value.require_code_owner_review, null)
+        require_last_push_approval        = try(pull_request.value.require_last_push_approval, null)
+        required_approving_review_count   = try(pull_request.value.required_approving_review_count, null)
+        required_review_thread_resolution = try(pull_request.value.required_review_thread_resolution, null)
+        allowed_merge_methods             = try(pull_request.value.allowed_merge_methods, null)
+
+        dynamic "required_reviewers" {
+          for_each = try(pull_request.value.required_reviewers, null) != null ? [pull_request.value.required_reviewers] : []
+
+          content {
+            file_patterns     = required_reviewers.value.file_patterns
+            minimum_approvals = try(required_reviewers.value.minimum_approvals, 0)
+
+            dynamic "reviewer" {
+              for_each = try(required_reviewers.value.reviewer, null) != null ? [required_reviewers.value.reviewer] : []
+
+              content {
+                id   = reviewer.value.id
+                type = try(reviewer.value.type, "Team")
+              }
+            }
+          }
+        }
+      }
+    }
+
+    dynamic "required_code_scanning" {
+      for_each = try(each.value.rules.required_code_scanning, null) != null ? [each.value.rules.required_code_scanning] : []
+
+      content {
+        dynamic "required_code_scanning_tool" {
+          for_each = try(required_code_scanning.value.required_code_scanning_tool, [])
+
+          content {
+            tool                      = try(required_code_scanning_tool.value.tool, null)
+            alerts_threshold          = try(required_code_scanning_tool.value.alerts_threshold, null)
+            security_alerts_threshold = try(required_code_scanning_tool.value.security_alerts_threshold, null)
+          }
+        }
+      }
+    }
+
+    dynamic "commit_message_pattern" {
+      for_each = try(each.value.rules.commit_message_pattern, null) != null ? [each.value.rules.commit_message_pattern] : []
+
+      content {
+        operator = commit_message_pattern.value.operator
+        pattern  = commit_message_pattern.value.pattern
+        name     = try(commit_message_pattern.value.name, null)
+        negate   = try(commit_message_pattern.value.negate, null)
+      }
+    }
+
+    dynamic "committer_email_pattern" {
+      for_each = try(each.value.rules.committer_email_pattern, null) != null ? [each.value.rules.committer_email_pattern] : []
+
+      content {
+        operator = committer_email_pattern.value.operator
+        pattern  = committer_email_pattern.value.pattern
+        name     = try(committer_email_pattern.value.name, null)
+        negate   = try(committer_email_pattern.value.negate, null)
+      }
+    }
+
+    dynamic "file_path_restriction" {
+      for_each = try(each.value.rules.file_path_restriction, null) != null ? [each.value.rules.file_path_restriction] : []
+
+      content {
+        restricted_file_paths = try(file_path_restriction.value.restricted_file_paths, [])
+      }
+    }
+
+    dynamic "file_extension_restriction" {
+      for_each = try(each.value.rules.file_extension_restriction, null) != null ? [each.value.rules.file_extension_restriction] : []
+
+      content {
+        restricted_file_extensions = try(file_extension_restriction.value.restricted_file_extensions, [])
+      }
+    }
+
+    dynamic "max_file_path_length" {
+      for_each = try(each.value.rules.max_file_path_length, null) != null ? [each.value.rules.max_file_path_length] : []
+
+      content {
+        max_file_path_length = try(max_file_path_length.value.max_file_path_length, null)
+      }
+    }
+
+    dynamic "max_file_size" {
+      for_each = try(each.value.rules.max_file_size, null) != null ? [each.value.rules.max_file_size] : []
+
+      content {
+        max_file_size = try(max_file_size.value.max_file_size, null)
+      }
+    }
+
+    dynamic "merge_queue" {
+      for_each = try(each.value.rules.merge_queue, null) != null ? [each.value.rules.merge_queue] : []
+
+      content {
+        check_response_timeout_minutes    = try(merge_queue.value.check_response_timeout_minutes, null)
+        grouping_strategy                 = try(merge_queue.value.grouping_strategy, null)
+        max_entries_to_build              = try(merge_queue.value.max_entries_to_build, null)
+        max_entries_to_merge              = try(merge_queue.value.max_entries_to_merge, null)
+        merge_method                      = try(merge_queue.value.merge_method, null)
+        min_entries_to_merge              = try(merge_queue.value.min_entries_to_merge, null)
+        min_entries_to_merge_wait_minutes = try(merge_queue.value.min_entries_to_merge_wait_minutes, null)
+      }
+    }
+
+    dynamic "copilot_code_review" {
+      for_each = try(each.value.rules.copilot_code_review, null) != null ? [each.value.rules.copilot_code_review] : []
+
+      content {
+        review_on_push             = try(copilot_code_review.value.review_on_push, null)
+        review_draft_pull_requests = try(copilot_code_review.value.review_draft_pull_requests, null)
+      }
+    }
+  }
 }
 
 resource "github_issue_label" "label" {
-  for_each = var.issue_labels_create ? local.issue_labels : {}
+  for_each = local.issue_labels_create ? local.issue_labels : {}
 
   repository  = github_repository.repository.name
   name        = each.value.name
   description = each.value.description
   color       = each.value.color
-}
-
-# ---------------------------------------------------------------------------------------------------------------------
-# Collaborators
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_collaborator
-# ---------------------------------------------------------------------------------------------------------------------
-
-locals {
-  collab_admin    = { for i in var.admin_collaborators : i => "admin" }
-  collab_push     = { for i in var.push_collaborators : i => "push" }
-  collab_pull     = { for i in var.pull_collaborators : i => "pull" }
-  collab_triage   = { for i in var.triage_collaborators : i => "triage" }
-  collab_maintain = { for i in var.maintain_collaborators : i => "maintain" }
-
-  collaborators = merge(
-    local.collab_admin,
-    local.collab_push,
-    local.collab_pull,
-    local.collab_triage,
-    local.collab_maintain,
-  )
 }
 
 resource "github_repository_collaborator" "collaborator" {
@@ -250,27 +441,6 @@ resource "github_repository_collaborator" "collaborator" {
   permission = each.value
 }
 
-# ---------------------------------------------------------------------------------------------------------------------
-# Teams by id
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/team_repository
-# ---------------------------------------------------------------------------------------------------------------------
-
-locals {
-  team_id_admin    = [for i in var.admin_team_ids : { team_id = i, permission = "admin" }]
-  team_id_push     = [for i in var.push_team_ids : { team_id = i, permission = "push" }]
-  team_id_pull     = [for i in var.pull_team_ids : { team_id = i, permission = "pull" }]
-  team_id_triage   = [for i in var.triage_team_ids : { team_id = i, permission = "triage" }]
-  team_id_maintain = [for i in var.maintain_team_ids : { team_id = i, permission = "maintain" }]
-
-  team_ids = concat(
-    local.team_id_admin,
-    local.team_id_push,
-    local.team_id_pull,
-    local.team_id_triage,
-    local.team_id_maintain,
-  )
-}
-
 resource "github_team_repository" "team_repository" {
   count = length(local.team_ids)
 
@@ -279,52 +449,12 @@ resource "github_team_repository" "team_repository" {
   permission = local.team_ids[count.index].permission
 }
 
-# ---------------------------------------------------------------------------------------------------------------------
-# Teams by name
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/team_repository
-# ---------------------------------------------------------------------------------------------------------------------
-
-locals {
-  team_admin    = [for i in var.admin_teams : { slug = replace(lower(i), "/[^a-z0-9_]/", "-"), permission = "admin" }]
-  team_push     = [for i in var.push_teams : { slug = replace(lower(i), "/[^a-z0-9_]/", "-"), permission = "push" }]
-  team_pull     = [for i in var.pull_teams : { slug = replace(lower(i), "/[^a-z0-9_]/", "-"), permission = "pull" }]
-  team_triage   = [for i in var.triage_teams : { slug = replace(lower(i), "/[^a-z0-9_]/", "-"), permission = "triage" }]
-  team_maintain = [for i in var.maintain_teams : { slug = replace(lower(i), "/[^a-z0-9_]/", "-"), permission = "maintain" }]
-
-  teams = { for i in concat(
-    local.team_admin,
-    local.team_push,
-    local.team_pull,
-    local.team_triage,
-    local.team_maintain,
-  ) : i.slug => i }
-}
-
 resource "github_team_repository" "team_repository_by_slug" {
   for_each = local.teams
 
   repository = github_repository.repository.name
   team_id    = each.value.slug
   permission = each.value.permission
-
-}
-
-# ---------------------------------------------------------------------------------------------------------------------
-# Deploy Keys
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_deploy_key
-# ---------------------------------------------------------------------------------------------------------------------
-
-locals {
-  deploy_keys_computed_temp = [
-    for d in var.deploy_keys_computed : try({ key = tostring(d) }, d)
-  ]
-
-  deploy_keys_computed = [
-    for d in local.deploy_keys_computed_temp : merge({
-      title     = length(split(" ", d.key)) > 2 ? element(split(" ", d.key), 2) : md5(d.key)
-      read_only = true
-    }, d)
-  ]
 }
 
 resource "github_repository_deploy_key" "deploy_key_computed" {
@@ -336,19 +466,6 @@ resource "github_repository_deploy_key" "deploy_key_computed" {
   read_only  = local.deploy_keys_computed[count.index].read_only
 }
 
-locals {
-  deploy_keys_temp = [
-    for d in var.deploy_keys : try({ key = tostring(d) }, d)
-  ]
-
-  deploy_keys = {
-    for d in local.deploy_keys_temp : lookup(d, "id", md5(d.key)) => merge({
-      title     = length(split(" ", d.key)) > 2 ? element(split(" ", d.key), 2) : md5(d.key)
-      read_only = true
-    }, d)
-  }
-}
-
 resource "github_repository_deploy_key" "deploy_key" {
   for_each = local.deploy_keys
 
@@ -358,38 +475,12 @@ resource "github_repository_deploy_key" "deploy_key" {
   read_only  = each.value.read_only
 }
 
-# ---------------------------------------------------------------------------------------------------------------------
-# Projects
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_project
-# ---------------------------------------------------------------------------------------------------------------------
-
-locals {
-  projects = { for i in var.projects : lookup(i, "id", lower(i.name)) => merge({
-    body = null
-  }, i) }
-}
-
-resource "github_repository_project" "repository_project" {
-  for_each = local.projects
-
-  repository = github_repository.repository.name
-  name       = each.value.name
-  body       = each.value.body
-}
-
-# ---------------------------------------------------------------------------------------------------------------------
-# Webhooks
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_webhook
-# ---------------------------------------------------------------------------------------------------------------------
-
 resource "github_repository_webhook" "repository_webhook" {
   count = length(var.webhooks)
 
   repository = github_repository.repository.name
-  # the optional `name` attribute causes an error so it has been removed
-  # > Error: "name": [REMOVED] The `name` attribute is no longer necessary.
-  active = try(var.webhooks[count.index].active, true)
-  events = var.webhooks[count.index].events
+  active     = try(var.webhooks[count.index].active, true)
+  events     = var.webhooks[count.index].events
 
   configuration {
     url          = var.webhooks[count.index].url
@@ -399,17 +490,6 @@ resource "github_repository_webhook" "repository_webhook" {
   }
 }
 
-# ---------------------------------------------------------------------------------------------------------------------
-# Autolink References
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_autolink_reference
-# ---------------------------------------------------------------------------------------------------------------------
-
-locals {
-  autolink_references = { for i in var.autolink_references : lookup(i, "id", lower(i.key_prefix)) => merge({
-    target_url_template = null
-  }, i) }
-}
-
 resource "github_repository_autolink_reference" "repository_autolink_reference" {
   for_each = local.autolink_references
 
@@ -417,32 +497,6 @@ resource "github_repository_autolink_reference" "repository_autolink_reference" 
   key_prefix          = each.value.key_prefix
   target_url_template = each.value.target_url_template
 }
-
-# ---------------------------------------------------------------------------------------------------------------------
-# Action Secrets
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/actions_secret
-# ---------------------------------------------------------------------------------------------------------------------
-
-locals {
-  plaintext_secrets = { for name, value in var.plaintext_secrets : name => { plaintext = value } }
-  encrypted_secrets = { for name, value in var.encrypted_secrets : name => { encrypted = value } }
-
-  secrets = merge(local.plaintext_secrets, local.encrypted_secrets)
-}
-
-resource "github_actions_secret" "repository_secret" {
-  for_each = local.secrets
-
-  repository      = github_repository.repository.name
-  secret_name     = each.key
-  plaintext_value = try(each.value.plaintext, null)
-  encrypted_value = try(each.value.encrypted, null)
-}
-
-# ---------------------------------------------------------------------------------------------------------------------
-# App installation
-# https://registry.terraform.io/providers/integrations/github/latest/docs/resources/app_installation_repository
-# ---------------------------------------------------------------------------------------------------------------------
 
 resource "github_app_installation_repository" "app_installation_repository" {
   for_each = var.app_installations

@@ -9,7 +9,7 @@
   ],
   "context": [
     "## About",
-    "A [1](Terraform) module for creating a public or private repository on [2](Github)."
+    "A [Terraform][1] module for creating a public or private repository on [GitHub][2]."
   ],
   "includes": [
     "docs/terraform.md"
